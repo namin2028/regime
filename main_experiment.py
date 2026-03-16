@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+import itertools
 from data_loader import DataLoader
 from models import KMeansRegimeDetector, GMMRegimeDetector, HMMRegimeDetector, MarkovSwitchingRegimeDetector, MSGARCHRegimeDetector
 from backtest_engine import BacktestEngine
@@ -184,6 +185,82 @@ def run_experiment():
         
         metrics_summary[model_name] = results
         
+    # 3. Create Ensembles from all combinations of baseline models
+    print("\n3. Generating Ensemble Combinations...")
+    
+    baseline_names = list(models.keys())
+    all_combinations = []
+    for r in range(2, len(baseline_names) + 1):
+        all_combinations.extend(itertools.combinations(baseline_names, r))
+        
+    combo_df = out_of_sample_features.copy()
+    candidate_cols = [f'Regime_{name}' for name in baseline_names]
+        
+    for combo in all_combinations:
+        combo_name = "+".join(combo)
+        col_name = f'Regime_Ensemble_{combo_name}'
+        candidate_cols.append(col_name)
+        
+        # Gather the regime columns of the constituent models
+        constituent_cols = [f'Regime_{name}' for name in combo]
+        
+        # Calculate majority vote. The mode can return multiple values if ties.
+        # We take the maximum mode value (e.g. 2 for Crisis) as a conservative tiebreaker.
+        vote_df = combo_df[constituent_cols].mode(axis=1)
+        combo_df[col_name] = vote_df.max(axis=1)
+        
+    combo_df.dropna(subset=candidate_cols, inplace=True)
+    
+    # 4. Walk-Forward Selection of the Best Strategy
+    print("\n4. Executing Walk-Forward Optimization for Ensemble Strategies...")
+    lookback_days = 252 # 1 Trading Year
+    step_days = 21
+    
+    total_oos_days = len(combo_df)
+    optimized_regimes = pd.Series(index=combo_df.index, dtype=float)
+    
+    current_idx = lookback_days
+    
+    while current_idx < total_oos_days:
+        hist_start = current_idx - lookback_days
+        hist_end = current_idx
+        test_end = min(current_idx + step_days, total_oos_days)
+        
+        # Data slice for evaluating Sharpe Ratio
+        hist_df = combo_df.iloc[hist_start:hist_end]
+        
+        best_candidate = None
+        best_sharpe = -np.inf
+        
+        for cand in candidate_cols:
+            engine = BacktestEngine(hist_df, price_col='Price', regime_col=cand)
+            res = engine.run_backtest()
+            if res['Sharpe_Strategy'] > best_sharpe:
+                best_sharpe = res['Sharpe_Strategy']
+                best_candidate = cand
+                
+        # Use the best candidate to predict the next `step_days` out-of-sample block
+        test_idx = combo_df.index[hist_end:test_end]
+        optimized_regimes.loc[test_idx] = combo_df.loc[test_idx, best_candidate].values
+        
+        current_idx += step_days
+        
+    # Append the dynamically selected regimes
+    combo_df['Regime_Optimized_Ensemble'] = optimized_regimes
+    final_oos_df = combo_df.dropna(subset=['Regime_Optimized_Ensemble'])
+    
+    print("   Testing the final Optimized Ensemble Strategy...")
+    # Plot Regimes
+    plot_regimes(final_oos_df, 'Price', 'Regime_Optimized_Ensemble', 'OOS S&P 500 Regimes by Optimized Ensemble', 'regime_plot_optimized_ensemble.png')
+    
+    # Run Backtest
+    engine = BacktestEngine(final_oos_df, price_col='Price', regime_col='Regime_Optimized_Ensemble')
+    results = engine.run_backtest()
+    
+    plot_cumulative_returns(engine.df, 'Optimized Ensemble Out-of-Sample Strategy vs Buy & Hold', 'backtest_optimized_ensemble.png')
+    
+    metrics_summary['Optimized_Ensemble'] = results
+    
     print("\n--- FINAL TRUE OUT-OF-SAMPLE PERFORMANCE METRICS ---")
     df_metrics = pd.DataFrame(metrics_summary).T
     

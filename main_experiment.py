@@ -136,8 +136,8 @@ def run_experiment():
     loader.fetch_data()
     features = loader.engineer_features('SPY')
     
-    # Reduced complexity to prevent curse of dimensionality in K-Means/HMM
-    model_feat_cols = ['Return_SMA_5', 'Volatility']
+    # Enhanced complexity for better regime separation
+    model_feat_cols = ['Return_SMA_5', 'Volatility', 'Log_Drawdown', 'RSI', 'Rolling_Kurt_63']
     
     # Clean drops
     features.dropna(subset=model_feat_cols, inplace=True)

@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>REGIME RIDER: Capitol Gains</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #121826; --panel2: #1a2235;
+    --text: #e6edf3; --dim: #8b98ab;
+    --green: #2ecc71; --red: #ff5d5d; --yellow: #f1c40f; --cyan: #38bdf8;
+    --gold: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -100px, #16203a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: flex; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app { width: 100%; max-width: 760px; padding: 10px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px; }
+  h1 { font-size: 17px; letter-spacing: 2px; color: var(--cyan); text-shadow: 0 0 18px rgba(56,189,248,.45); }
+  h1 span { color: var(--gold); }
+  #clock { color: var(--dim); font-size: 12px; }
+
+  #leaderbar {
+    background: var(--panel); border: 1px solid #243049; border-radius: 10px;
+    padding: 6px 10px; font-size: 12px; display: flex; justify-content: space-between;
+    align-items: center; gap: 8px;
+  }
+  #leaderbar .who { color: var(--gold); }
+  #bubblewrap { display: flex; align-items: center; gap: 6px; color: var(--dim); }
+  #bubblebar { width: 70px; height: 8px; background: #0e1422; border-radius: 4px; overflow: hidden; border: 1px solid #243049; }
+  #bubblefill { height: 100%; width: 0%; background: linear-gradient(90deg, #38bdf8, #f1c40f, #ff5d5d); transition: width .4s; }
+
+  #chartwrap { position: relative; background: var(--panel); border: 1px solid #243049; border-radius: 12px; overflow: hidden; }
+  canvas { display: block; width: 100%; }
+  #flash {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    transition: opacity .6s;
+  }
+  #flash.crash { background: radial-gradient(circle, rgba(255,60,60,.16), transparent 70%); opacity: 1; }
+  #flash.boom  { background: radial-gradient(circle, rgba(46,204,113,.13), transparent 70%); opacity: 1; }
+
+  #stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--panel); border: 1px solid #243049; border-radius: 10px; padding: 7px 9px; }
+  .stat .k { font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+  .stat .v { font-size: 15px; margin-top: 2px; }
+  .pos { color: var(--cyan); } .up { color: var(--green); } .down { color: var(--red); }
+
+  #controls { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 8px; }
+  button {
+    font-family: inherit; font-size: 14px; padding: 13px 6px; border-radius: 12px;
+    cursor: pointer; color: var(--text);
+    background: var(--panel2); border: 1px solid #2a3a5c; transition: transform .06s, box-shadow .2s;
+    touch-action: manipulation;
+  }
+  button:active { transform: scale(.96); }
+  .btn-long.active  { background: #103a24; border-color: var(--green); box-shadow: 0 0 16px rgba(46,204,113,.35); }
+  .btn-cash.active  { background: #3a3210; border-color: var(--yellow); box-shadow: 0 0 16px rgba(241,196,15,.30); }
+  .btn-short.active { background: #3a1414; border-color: var(--red);   box-shadow: 0 0 16px rgba(255,93,93,.35); }
+  .small { font-size: 12px; padding: 13px 12px; color: var(--dim); }
+
+  #tickerwrap {
+    background: #0d1322; border: 1px solid #243049; border-radius: 8px;
+    overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--dim); padding: 6px 0;
+  }
+  #ticker { display: inline-block; padding-left: 100%; animation: scroll 18s linear infinite; }
+  @keyframes scroll { to { transform: translateX(-100%); } }
+
+  /* ── modal ── */
+  #overlay {
+    position: fixed; inset: 0; background: rgba(5,8,15,.82); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+  }
+  #overlay.hidden { display: none; }
+  .card {
+    background: linear-gradient(180deg, #18223a, #101626); border: 1px solid #31415f;
+    border-radius: 16px; padding: 22px; max-width: 560px; width: 100%;
+    max-height: 86vh; overflow-y: auto;
+    box-shadow: 0 24px 70px rgba(0,0,0,.6); animation: pop .25s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.92) translateY(12px); opacity: 0; } }
+  .card h2 { color: var(--gold); font-size: 16px; letter-spacing: 1px; margin-bottom: 10px; }
+  .card p { font-size: 13px; line-height: 1.65; color: #c7d2e0; margin-bottom: 10px; }
+  .card .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .card .choices button { text-align: left; font-size: 13px; line-height: 1.4; }
+  .card .choices button:hover { border-color: var(--cyan); }
+  .card .choices button b { color: var(--cyan); }
+  .candidate b { color: var(--gold); }
+  .candidate i { color: var(--dim); display: block; font-style: normal; font-size: 11px; margin-top: 3px; }
+
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #182238; border: 1px solid var(--cyan); color: var(--text);
+    padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 60;
+    transition: transform .3s; max-width: 90vw; text-align: center;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  .strip { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin: 6px 0 12px; }
+  .strip div { flex: 1; }
+  table.results { width: 100%; font-size: 13px; border-collapse: collapse; margin: 8px 0; }
+  table.results td { padding: 3px 6px; }
+  table.results td:not(:first-child) { text-align: right; }
+  .grade { font-size: 44px; text-align: center; margin: 10px 0 2px; text-shadow: 0 0 24px currentColor; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>REGIME RIDER <span>· CAPITOL GAINS</span></h1>
+    <div id="clock">Year 1 · Day 1</div>
+  </header>
+
+  <div id="leaderbar">
+    <div>🏛️ <span class="who" id="leadername">—</span> <span id="leadertitle" style="color:var(--dim)"></span></div>
+    <div id="bubblewrap" title="Speculative excess">FROTH <div id="bubblebar"><div id="bubblefill"></div></div></div>
+  </div>
+
+  <div id="chartwrap">
+    <canvas id="chart" height="300"></canvas>
+    <div id="flash"></div>
+  </div>
+
+  <div id="stats">
+    <div class="stat"><div class="k">FUND</div><div class="v" id="s-equity">$1.000M</div></div>
+    <div class="stat"><div class="k">VS MARKET</div><div class="v" id="s-edge">+0.0%</div></div>
+    <div class="stat"><div class="k">VOL 21D</div><div class="v" id="s-vol">—</div></div>
+    <div class="stat"><div class="k">DRAWDOWN</div><div class="v" id="s-dd">0%</div></div>
+  </div>
+
+  <div id="controls">
+    <button class="btn-long"  id="b-long"  onclick="setPos('LONG')">▲ LONG</button>
+    <button class="btn-cash"  id="b-cash"  onclick="setPos('CASH')">■ CASH</button>
+    <button class="btn-short" id="b-short" onclick="setPos('SHORT')">▼ SHORT</button>
+    <button class="small" id="b-speed" onclick="cycleSpeed()">1×</button>
+    <button class="small" id="b-pause" onclick="togglePause()">❚❚</button>
+  </div>
+
+  <div id="tickerwrap"><div id="ticker">Welcome to the Meridian Exchange. Markets open. Try not to blow up. ··· </div></div>
+</div>
+
+<div id="overlay" class="hidden"><div class="card" id="card"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════
+   REGIME RIDER: CAPITOL GAINS
+   A market-timing story game. The market secretly switches
+   between hidden regimes; politicians you install rewire the
+   regime dynamics. Survive 6 years. Beat the index.
+   ════════════════════════════════════════════════════════════ */
+
+// ── RNG ──────────────────────────────────────────────────────
+let _seed = (Date.now() % 2147483647) || 7;
+function rand() { _seed = (_seed * 48271) % 2147483647; return _seed / 2147483647; }
+function gauss() {
+  let u = 0, v = 0;
+  while (u === 0) u = rand();
+  while (v === 0) v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function pick(arr) { return arr[Math.floor(rand() * arr.length)]; }
+
+// ── Market regimes (hidden) ─────────────────────────────────
+const REGIMES = {
+  BULL:   { mu: 0.00080, sigma: 0.008, color: '#2ecc71' },
+  CHOP:   { mu: 0.00000, sigma: 0.013, color: '#f1c40f' },
+  CRISIS: { mu: -0.0030, sigma: 0.028, color: '#ff5d5d' },
+};
+const BASE_TRANS = {
+  BULL:   { BULL: .970, CHOP: .025, CRISIS: .005 },
+  CHOP:   { BULL: .030, CHOP: .945, CRISIS: .025 },
+  CRISIS: { BULL: .010, CHOP: .060, CRISIS: .930 },
+};
+const IDEAL = { BULL: 'LONG', CHOP: 'CASH', CRISIS: 'SHORT' };
+
+// ── Politicians ─────────────────────────────────────────────
+// drift: added daily return · volMult: multiplies sigma
+// crisisMult: scales P(enter crisis) · recovMult: scales P(exit crisis)
+// froth: daily bubble buildup in bull markets
+const POLITICIANS = [
+  { name: 'Victoria Hawke', title: 'the Inflation Hawk', emoji: '🦅',
+    pitch: '“I will raise rates until morale improves.”',
+    intel: 'Tight money: calmer markets, weaker rallies, crashes rarer but slower to heal.',
+    fx: { drift: -0.00025, volMult: 0.75, crisisMult: 0.55, recovMult: 0.70, froth: -0.10 },
+    news: ['Hawke hikes rates again; champagne sales plummet on Wall Street',
+           'Hawke: "Savers deserve nice things too"',
+           'Mortgage rates hit decade high under Hawke doctrine'] },
+  { name: 'Sonny Marlow', title: 'the Stimulus King', emoji: '🎉',
+    pitch: '“Free money for everyone! What could go wrong?”',
+    intel: 'Helicopter money: juiced rallies and fast recoveries — but froth builds, and froth pops.',
+    fx: { drift: 0.00045, volMult: 1.05, crisisMult: 1.10, recovMult: 1.60, froth: 0.55 },
+    news: ['Marlow signs 4th stimulus bill this quarter',
+           'Marlow rings opening bell, market up before he lets go',
+           '"Deficits are a state of mind" — President Marlow'] },
+  { name: 'Dr. Ada Quist', title: 'the Technocrat', emoji: '🤖',
+    pitch: '“I have a 4,000-page plan and I intend to read it to you.”',
+    intel: 'Steady hands: modest growth, dampened volatility, few surprises in either direction.',
+    fx: { drift: 0.00015, volMult: 0.85, crisisMult: 0.80, recovMult: 1.10, froth: 0.05 },
+    news: ['Quist publishes quarterly dashboard; markets politely applaud',
+           'Quist appoints committee to oversee committee oversight',
+           'GDP arrives exactly at consensus. Again. Eerie.'] },
+  { name: 'Rex Sterling', title: 'the Strongman', emoji: '🪖',
+    pitch: '“Markets respect strength. And tariffs. Mostly tariffs.”',
+    intel: 'Big swings: explosive rallies, sudden panics. High risk, high drama.',
+    fx: { drift: 0.00030, volMult: 1.45, crisisMult: 1.45, recovMult: 1.30, froth: 0.35 },
+    news: ['Sterling tweets at 3am; futures gap 2%',
+           'Sterling threatens to nationalize the weather',
+           'Allies "concerned" after Sterling renames the central bank after himself'] },
+  { name: 'Willow Greenfield', title: 'the Reformer', emoji: '🌱',
+    pitch: '“I am going to regulate everything you love.”',
+    intel: 'Guardrails everywhere: growth drags short-term, but crashes are rarer and shallower.',
+    fx: { drift: -0.00010, volMult: 0.90, crisisMult: 0.50, recovMult: 0.90, froth: -0.20 },
+    news: ['Greenfield bans 14 derivatives nobody understood anyway',
+           'Compliance officers now outnumber traders 3 to 1',
+           'Greenfield: "Boring finance is good finance"'] },
+];
+
+// ── Headlines by regime (75% truthful ticker) ───────────────
+const WIRE = {
+  BULL: ['Earnings smash estimates across the board', 'Retail pours in: "stocks only go up"',
+         'IPO triples on debut', 'Unemployment hits multi-decade low', 'Analysts raise targets, again'],
+  CHOP: ['Markets mixed as traders await literally any signal', 'Indices flat; everyone claims vindication',
+         'Volume dries up ahead of long weekend', 'CPI exactly in line; markets sulk anyway'],
+  CRISIS: ['Margin calls cascade across the Street', 'Bank CEO insists balance sheet "rock solid" (uh oh)',
+           'VIX spikes; options desk orders 3rd consecutive midnight pizza', 'Circuit breakers trip at the open',
+           'Sovereign default rumors rattle the wires'],
+};
+
+// ── Story events ────────────────────────────────────────────
+function storyEvents() {
+  return [
+    { day: 90 + Math.floor(rand() * 60), title: '📞 THE TIP',
+      body: 'A man in an immaculate suit "bumps into you" at a charity gala. He knows things. For 2% of your fund, he will whisper what regime the market is REALLY in right now.',
+      choices: [
+        { label: '<b>Pay the man.</b> Knowledge is alpha. (−2% of fund)',
+          act: () => { G.equity *= 0.98; toast(`He leans in: “It's a ${G.regime} market. Obviously.”`); } },
+        { label: '<b>Decline.</b> Your compliance officer is watching.',
+          act: () => toast('He evaporates into the crowd. You will wonder forever.') } ] },
+
+    { day: 220 + Math.floor(rand() * 80), title: '🍞 SENTIENT TOASTER INC.',
+      body: 'A startup claims its toaster achieved consciousness and, crucially, "feelings about equities." The IPO is tomorrow. Your analyst is crying, but won\'t say if it\'s joy.',
+      choices: [
+        { label: '<b>YOLO 10% of the fund</b> into the IPO.',
+          act: () => { const m = G.regime === 'BULL' ? (0.7 + rand() * 2.6) : (rand() * 1.4);
+            const stake = G.equity * 0.10; G.equity += stake * (m - 1);
+            toast(m > 1 ? `The toaster delivers. Stake ×${m.toFixed(1)} 🍞🚀` : `The toaster had doubts. Stake ×${m.toFixed(1)} 💸`); } },
+        { label: '<b>Pass.</b> You did not get rich betting on appliances.',
+          act: () => toast('The toaster later wins a Pulitzer. No regrets. Some regrets.') } ] },
+
+    { day: 420 + Math.floor(rand() * 90), title: '🐻 THE REPORT',
+      body: 'Grizzly Research publishes "MERIDIAN FUND: A HOUSE OF CARDS?" The question mark is doing a lot of work. Your investors are calling.',
+      choices: [
+        { label: '<b>Settle quietly.</b> (−1.5% of fund, problem disappears)',
+          act: () => { G.equity *= 0.985; toast('The report vanishes. The internet never notices. Lucky.'); } },
+        { label: '<b>Fight it publicly.</b> 50/50: vindication or a −5% redemption wave.',
+          act: () => { if (rand() < 0.5) toast('Vindicated! The shorts cover. Your Twitter is insufferable.');
+            else { G.equity *= 0.95; toast('The report sticks. Redemptions hurt. −5%.'); } } } ] },
+
+    { day: 640 + Math.floor(rand() * 100), title: '🎰 COUSIN DANNY',
+      body: 'Your cousin Danny has launched a cryptocurrency called GravyCoin. "It\'s like money," he explains, "but gravy-themed." He is offering you the pre-sale.',
+      choices: [
+        { label: '<b>Ape in 5%.</b> Tiny chance of glory, large chance of gravy.',
+          act: () => { const r = rand(); const stake = G.equity * 0.05;
+            if (r > 0.93) { G.equity += stake * 5; toast('GravyCoin ×6. Danny buys a yacht shaped like a boat. +25% fund 🤯'); }
+            else { G.equity -= stake * (0.6 + rand() * 0.4); toast('GravyCoin rugged. Danny is "between addresses."'); } } },
+        { label: '<b>Block Danny.</b> Family is family, but no.',
+          act: () => toast('GravyCoin goes to zero in 11 days. Thanksgiving will be awkward anyway.') } ] },
+
+    { day: 880 + Math.floor(rand() * 120), title: '🕊️ THE WHISPER',
+      body: 'A retiring central bank official wants her memoirs ghost-written by "someone who gets markets." In exchange: one honest sentence about the road ahead.',
+      choices: [
+        { label: '<b>Take the deal.</b> Hear the sentence.',
+          act: () => { const t = BASE_TRANS[G.regime]; const pc = (t.CRISIS * G.leader.fx.crisisMult * (1 + G.bubble / 80));
+            toast(pc > 0.02 ? '“Storm clouds. Keep your boots by the door.” ⛈️' : '“Smooth water ahead. Mostly.” ☀️'); } },
+        { label: '<b>Refuse.</b> You\'re a trader, not a typist.',
+          act: () => toast('Her memoirs later sell 40 million copies. The sentence remains unknown.') } ] },
+
+    { day: 1150 + Math.floor(rand() * 120), title: '🏝️ THE OFFER',
+      body: 'A sovereign wealth fund offers to buy out 20% of your fund "win or lose, for stability." Lock in profits, or stay greedy?',
+      choices: [
+        { label: '<b>Take the de-risk.</b> 20% of the fund becomes cash forever (earns T-bill rate, immune to everything).',
+          act: () => { G.lockbox = G.equity * 0.20; G.equity *= 0.80; toast('20% sealed in the vault. Sleep improves immediately.'); } },
+        { label: '<b>Stay fully invested.</b> Fortune favors the unhedged.',
+          act: () => toast('The SWF shrugs and buys an airline instead.') } ] },
+  ];
+}
+
+// ── Game state ──────────────────────────────────────────────
+const YEARS = 6, DAYS = 252 * YEARS, TERM = 504;
+const RF_DAILY = 0.04 / 252, BORROW_DAILY = 0.012 / 252, FEE = 0.001;
+
+const G = {};
+function resetState() {
+  Object.assign(G, {
+    day: 0, price: 100, regime: 'BULL', bubble: 0, popped: 0,
+    equity: 1.0, lockbox: 0, bnh: 1.0, position: 'CASH',
+    prices: [100], regimes: [], positions: [], eqHist: [1], bnhHist: [1],
+    retHist: [], leader: null, leadersElected: [],
+    speed: 1, paused: true, events: storyEvents(), trades: 0,
+  });
+}
+
+// ── Market step ─────────────────────────────────────────────
+function stepDay() {
+  const fx = G.leader.fx;
+
+  // regime transition, warped by the administration + froth
+  const t = BASE_TRANS[G.regime];
+  let pBull = t.BULL, pChop = t.CHOP, pCrisis = t.CRISIS;
+  pCrisis *= fx.crisisMult * (1 + G.bubble / 80);
+  if (G.regime === 'CRISIS') { pBull *= fx.recovMult; pChop *= fx.recovMult; }
+  const sum = pBull + pChop + pCrisis;
+  const r = rand() * sum;
+  const prev = G.regime;
+  G.regime = r < pBull ? 'BULL' : r < pBull + pChop ? 'CHOP' : 'CRISIS';
+
+  // froth: builds in juiced bull markets, pops on crisis entry
+  if (G.regime === 'BULL') G.bubble = Math.min(100, Math.max(0, G.bubble + fx.froth));
+  else G.bubble = Math.max(0, G.bubble - 0.4);
+  if (G.regime === 'CRISIS' && prev !== 'CRISIS' && G.bubble > 55) {
+    G.popped = 40;            // 40 days of amplified carnage
+    G.bubble = 10;
+    flash('crash'); toast('💥 THE BUBBLE POPS. Years of froth unwind in days.');
+  }
+  if (G.popped > 0) G.popped--;
+
+  // price move
+  const reg = REGIMES[G.regime];
+  const sev = G.popped > 0 ? 1.6 : 1.0;
+  const ret = (reg.mu * sev + fx.drift) + gauss() * reg.sigma * fx.volMult * sev;
+  G.price *= Math.exp(ret);
+
+  // portfolio
+  const mkt = Math.exp(ret) - 1;
+  let pr = G.position === 'LONG' ? mkt : G.position === 'CASH' ? RF_DAILY : -mkt - BORROW_DAILY;
+  G.equity *= 1 + pr;
+  G.lockbox *= 1 + RF_DAILY;
+  G.bnh *= 1 + mkt;
+
+  G.day++;
+  G.prices.push(G.price);
+  G.regimes.push(G.regime);
+  G.positions.push(G.position);
+  G.eqHist.push(G.equity + G.lockbox);
+  G.bnhHist.push(G.bnh);
+  G.retHist.push(pr);
+
+  if (G.day % 6 === 0) updateTicker();
+  if (G.day % TERM === 0 && G.day < DAYS) electionDay();
+  const ev = G.events.find(e => e.day === G.day);
+  if (ev) showEvent(ev);
+  if (G.day >= DAYS) endGame();
+}
+
+// ── Player actions ──────────────────────────────────────────
+function setPos(p) {
+  if (G.position === p || G.day >= DAYS) return;
+  G.position = p;
+  G.equity *= 1 - FEE;            // commission on every switch
+  G.trades++;
+  ['long', 'cash', 'short'].forEach(x =>
+    document.getElementById('b-' + x).classList.toggle('active', p.toLowerCase() === x));
+}
+function cycleSpeed() {
+  G.speed = G.speed === 1 ? 2 : G.speed === 2 ? 4 : 1;
+  document.getElementById('b-speed').textContent = G.speed + '×';
+}
+function togglePause() {
+  G.paused = !G.paused;
+  document.getElementById('b-pause').textContent = G.paused ? '▶' : '❚❚';
+}
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'l') setPos('LONG'); else if (k === 'c') setPos('CASH');
+  else if (k === 's') setPos('SHORT'); else if (k === ' ') { e.preventDefault(); togglePause(); }
+});
+
+// ── UI helpers ──────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.innerHTML = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 4200);
+}
+function flash(kind) {
+  const f = $('flash'); f.className = kind;
+  setTimeout(() => f.className = '', 900);
+}
+function updateTicker() {
+  let pool = rand() < 0.75 ? WIRE[G.regime] : WIRE[pick(Object.keys(WIRE))];
+  let items = [pick(pool)];
+  if (rand() < 0.45) items.push(pick(G.leader.news));
+  items.push(pick(pool === WIRE[G.regime] ? WIRE[pick(Object.keys(WIRE))] : WIRE[G.regime]));
+  $('ticker').textContent = ' ··· ' + items.join(' ··· ') + ' ··· ';
+}
+
+function realizedVol() {
+  const n = 21, p = G.prices;
+  if (p.length < n + 1) return 0;
+  const rets = [];
+  for (let i = p.length - n; i < p.length; i++) rets.push(Math.log(p[i] / p[i - 1]));
+  const m = rets.reduce((a, b) => a + b, 0) / n;
+  const v = rets.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1);
+  return Math.sqrt(v * 252);
+}
+function drawdown(arr) {
+  let peak = -Infinity, dd = 0;
+  for (const x of arr) { peak = Math.max(peak, x); dd = Math.min(dd, x / peak - 1); }
+  return dd;
+}
+
+function updateHUD() {
+  const total = G.equity + G.lockbox;
+  $('clock').textContent = `Year ${Math.floor(G.day / 252) + 1} · Day ${(G.day % 252) + 1}`;
+  $('s-equity').textContent = '$' + total.toFixed(3) + 'M';
+  $('s-equity').className = 'v ' + (total >= 1 ? 'up' : 'down');
+  const edge = (total / G.bnh - 1) * 100;
+  $('s-edge').textContent = (edge >= 0 ? '+' : '') + edge.toFixed(1) + '%';
+  $('s-edge').className = 'v ' + (edge >= 0 ? 'up' : 'down');
+  const vol = realizedVol();
+  $('s-vol').textContent = (vol * 100).toFixed(0) + '%';
+  $('s-vol').className = 'v ' + (vol < 0.15 ? 'up' : vol < 0.30 ? '' : 'down');
+  const dd = drawdown(G.eqHist);
+  $('s-dd').textContent = (dd * 100).toFixed(0) + '%';
+  $('s-dd').className = 'v ' + (dd > -0.1 ? '' : 'down');
+  $('bubblefill').style.width = G.bubble + '%';
+}
+
+// ── Chart ───────────────────────────────────────────────────
+const cv = $('chart'), cx = cv.getContext('2d');
+function sizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth;
+  cv.width = w * dpr; cv.height = 300 * dpr;
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', sizeCanvas);
+
+function drawChart() {
+  const W = cv.clientWidth, H = 300, PAD = 8, STRIP = 10;
+  cx.clearRect(0, 0, W, H);
+  const win = 300;
+  const data = G.prices.slice(-win);
+  if (data.length < 2) return;
+  const lo = Math.min(...data) * 0.995, hi = Math.max(...data) * 1.005;
+  const x = i => PAD + (i / (data.length - 1)) * (W - 2 * PAD);
+  const y = p => PAD + (1 - (p - lo) / (hi - lo)) * (H - 2 * PAD - STRIP - 6);
+
+  // grid
+  cx.strokeStyle = 'rgba(60,80,120,.18)'; cx.lineWidth = 1;
+  for (let g = 1; g <= 3; g++) {
+    const gy = PAD + g * (H - 2 * PAD - STRIP) / 4;
+    cx.beginPath(); cx.moveTo(PAD, gy); cx.lineTo(W - PAD, gy); cx.stroke();
+  }
+
+  // election markers
+  cx.strokeStyle = 'rgba(251,191,36,.35)';
+  const start = G.prices.length - data.length;
+  for (let d = TERM; d < DAYS; d += TERM) {
+    if (d >= start && d < G.prices.length) {
+      const xi = x(d - start);
+      cx.beginPath(); cx.moveTo(xi, PAD); cx.lineTo(xi, H - PAD - STRIP - 4); cx.stroke();
+      cx.fillStyle = 'rgba(251,191,36,.8)'; cx.font = '10px monospace';
+      cx.fillText('🗳', xi - 5, PAD + 10);
+      cx.strokeStyle = 'rgba(251,191,36,.35)';
+    }
+  }
+
+  // price area + line
+  const grad = cx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(56,189,248,.25)'); grad.addColorStop(1, 'rgba(56,189,248,0)');
+  cx.beginPath(); cx.moveTo(x(0), y(data[0]));
+  for (let i = 1; i < data.length; i++) cx.lineTo(x(i), y(data[i]));
+  cx.lineTo(x(data.length - 1), H - PAD - STRIP - 4); cx.lineTo(x(0), H - PAD - STRIP - 4);
+  cx.closePath(); cx.fillStyle = grad; cx.fill();
+
+  cx.beginPath(); cx.moveTo(x(0), y(data[0]));
+  for (let i = 1; i < data.length; i++) cx.lineTo(x(i), y(data[i]));
+  cx.strokeStyle = '#38bdf8'; cx.lineWidth = 2; cx.shadowColor = '#38bdf8'; cx.shadowBlur = 8;
+  cx.stroke(); cx.shadowBlur = 0;
+
+  // pulsing last-price dot
+  const lx = x(data.length - 1), ly = y(data[data.length - 1]);
+  const pulse = 3 + Math.sin(Date.now() / 200) * 1.5;
+  cx.beginPath(); cx.arc(lx, ly, pulse, 0, Math.PI * 2);
+  cx.fillStyle = '#e6edf3'; cx.fill();
+
+  // position strip (your exposure history — green/yellow/red)
+  const posWin = G.positions.slice(-win);
+  const pw = (W - 2 * PAD) / Math.max(posWin.length, 1);
+  posWin.forEach((p, i) => {
+    cx.fillStyle = p === 'LONG' ? 'rgba(46,204,113,.7)' : p === 'CASH' ? 'rgba(241,196,15,.55)' : 'rgba(255,93,93,.7)';
+    cx.fillRect(PAD + i * pw, H - PAD - STRIP, pw + 0.5, STRIP);
+  });
+
+  // price label
+  cx.fillStyle = '#8b98ab'; cx.font = '11px monospace';
+  cx.fillText(G.price.toFixed(2), W - 64, PAD + 12);
+}
+
+// ── Modals ──────────────────────────────────────────────────
+function modal(html) { $('card').innerHTML = html; $('overlay').classList.remove('hidden'); G.paused = true; $('b-pause').textContent = '▶'; }
+function closeModal(resume = true) {
+  $('overlay').classList.add('hidden');
+  if (resume) { G.paused = false; $('b-pause').textContent = '❚❚'; }
+}
+
+function showEvent(ev) {
+  modal(`<h2>${ev.title}</h2><p>${ev.body}</p><div class="choices">` +
+    ev.choices.map((c, i) => `<button onclick="chooseEvent(${i})">${c.label}</button>`).join('') + '</div>');
+  G._event = ev;
+}
+function chooseEvent(i) { closeModal(); G._event.choices[i].act(); G._event = null; }
+
+function electionDay() {
+  const slate = [];
+  const pool = [...POLITICIANS];
+  while (slate.length < 3) slate.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  G._slate = slate;
+  const yr = Math.floor(G.day / 252) + 1;
+  modal(`<h2>🗳️ ELECTION ${G.day === 0 ? 'DAY' : '— YEAR ' + yr}</h2>
+    <p>${G.day === 0
+      ? 'Your fund\'s PAC is, regrettably, the largest in the country. Whoever you back, wins. The market will live under their policies for the next two years.'
+      : 'Another term ends. The PAC checkbook opens once more. Choose the next administration.'}</p>
+    <div class="choices">` +
+    slate.map((c, i) => `<button class="candidate" onclick="elect(${i})">${c.emoji} <b>${c.name}</b>, ${c.title}<br>${c.pitch}<i>INTEL: ${c.intel}</i></button>`).join('') +
+    '</div>');
+}
+function elect(i) {
+  G.leader = G._slate[i];
+  G.leadersElected.push(G.leader);
+  $('leadername').textContent = G.leader.emoji + ' ' + G.leader.name;
+  $('leadertitle').textContent = G.leader.title;
+  closeModal();
+  toast(`${G.leader.emoji} ${G.leader.name} wins in a landslide. Funny how that works.`);
+  flash('boom');
+}
+
+// ── Intro & End ─────────────────────────────────────────────
+function intro() {
+  modal(`<h2>📈 REGIME RIDER: CAPITOL GAINS</h2>
+    <p>You run the <b style="color:var(--gold)">Meridian Fund</b> ($1M, soon to be more, possibly less). The market secretly cycles between <span style="color:var(--green)">BULL</span>, <span style="color:var(--yellow)">CHOP</span>, and <span style="color:var(--red)">CRISIS</span> regimes — you never see them, only the tape.</p>
+    <p>Trade <b>LONG</b> / <b>CASH</b> / <b>SHORT</b> anytime (0.1% fee per switch). Watch volatility, drawdowns and the news wire (it lies 25% of the time). Mind the <b>FROTH</b> meter — bubbles are fun until they aren't.</p>
+    <p>And every two years: an <b>election</b>. Your PAC picks the winner, and the winner rewires the market itself.</p>
+    <p style="color:var(--dim)">Survive ${YEARS} years. Beat the index. Keys: L / C / S / space.</p>
+    <div class="choices"><button onclick="startGame()"><b>RING THE BELL ➤</b></button></div>`);
+}
+function startGame() { closeModal(false); electionDay(); }
+
+function sharpe(rets) {
+  if (rets.length < 2) return 0;
+  const ex = rets.map(r => r - RF_DAILY);
+  const m = ex.reduce((a, b) => a + b, 0) / ex.length;
+  const sd = Math.sqrt(ex.reduce((a, b) => a + (b - m) ** 2, 0) / (ex.length - 1));
+  return sd > 1e-12 ? m / sd * Math.sqrt(252) : 0;
+}
+
+function endGame() {
+  clearInterval(loop);
+  const total = G.equity + G.lockbox;
+  const pr = total - 1, br = G.bnh - 1;
+  const hits = G.positions.filter((p, i) => p === IDEAL[G.regimes[i]]).length;
+  const acc = hits / G.positions.length;
+  const score = (pr - br) * 100 + (acc - 1 / 3) * 40;
+  const [letter, color, blurb] =
+    score >= 25 ? ['S', '#38bdf8', 'The textbooks will be rewritten. Badly, but still.'] :
+    score >= 12 ? ['A', '#2ecc71', 'The Street whispers your name. Politicians return your calls first.'] :
+    score >= 4  ? ['B', '#2ecc71', 'Genuinely sharp. Your investors only pretend to understand how.'] :
+    score >= 0  ? ['C', '#f1c40f', 'You matched the index, with extra steps.'] :
+    score >= -10 ? ['D', '#ff8c5d', 'The index fund brochure is in your mailbox. Take the hint.'] :
+                   ['F', '#ff5d5d', 'The margin desk would like a word. Several words.'];
+
+  const rs = G.regimes.length / 100;
+  const regimeStrip = Array.from({ length: 100 }, (_, i) =>
+    `<div style="background:${REGIMES[G.regimes[Math.floor(i * rs)]].color}"></div>`).join('');
+  const posStrip = Array.from({ length: 100 }, (_, i) => {
+    const p = G.positions[Math.floor(i * rs)];
+    return `<div style="background:${p === 'LONG' ? '#2ecc71' : p === 'CASH' ? '#f1c40f' : '#ff5d5d'}"></div>`;
+  }).join('');
+  const cab = G.leadersElected.map(l => l.emoji + ' ' + l.name.split(' ')[1]).join(' → ');
+
+  modal(`<h2>🔔 CLOSING BELL — THE BIG REVEAL</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:2px">HIDDEN REGIMES (green bull · yellow chop · red crisis)</p>
+    <div class="strip">${regimeStrip}</div>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:2px">YOUR POSITIONS (green long · yellow cash · red short)</p>
+    <div class="strip">${posStrip}</div>
+    <table class="results">
+      <tr><td></td><td><b>You</b></td><td>Index</td></tr>
+      <tr><td>Total return</td><td class="${pr >= 0 ? 'up' : 'down'}">${(pr * 100).toFixed(1)}%</td><td>${(br * 100).toFixed(1)}%</td></tr>
+      <tr><td>Sharpe</td><td>${sharpe(G.retHist).toFixed(2)}</td><td>—</td></tr>
+      <tr><td>Max drawdown</td><td>${(drawdown(G.eqHist) * 100).toFixed(0)}%</td><td>${(drawdown(G.bnhHist) * 100).toFixed(0)}%</td></tr>
+      <tr><td>Regime read</td><td>${(acc * 100).toFixed(0)}%</td><td>—</td></tr>
+      <tr><td>Trades</td><td>${G.trades}</td><td>1</td></tr>
+    </table>
+    <p style="font-size:12px;color:var(--dim)">Administrations you installed: ${cab}</p>
+    <div class="grade" style="color:${color}">${letter}</div>
+    <p style="text-align:center">${blurb}</p>
+    <div class="choices"><button onclick="location.reload()"><b>RUN IT BACK ➤</b></button></div>`);
+}
+
+// ── Main loop ───────────────────────────────────────────────
+let loop;
+function frame() {
+  if (!G.paused && G.leader) for (let i = 0; i < G.speed; i++) if (G.day < DAYS) stepDay();
+  updateHUD();
+  drawChart();
+}
+resetState();
+sizeCanvas();
+loop = setInterval(frame, 80);
+intro();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "poll_seconds": 60,
+  "discord_webhook_url": "",
+  "products": [
+    {
+      "name": "Example: Scarlet & Violet ETB (Pokemon Center)",
+      "url": "https://www.pokemoncenter.com/product/XXX-XXXXX/example-product"
+    },
+    {
+      "name": "Example: 151 Booster Bundle (Target)",
+      "url": "https://www.target.com/p/example/-/A-00000000"
+    },
+    {
+      "name": "Example: custom retailer with explicit markers",
+      "url": "https://www.somestore.com/pokemon-product",
+      "in_stock_text": ["Add to Cart"],
+      "out_of_stock_text": ["Sold Out"]
+    }
+  ]
+}
